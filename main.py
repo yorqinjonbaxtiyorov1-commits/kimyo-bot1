@@ -2,6 +2,102 @@ import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ConversationHandler,
+    ContextTypes,
+    filters
+)
+
+# Bosqichlar (State)
+NAME, HOMEWORK = range(2)
+
+# Render portini tinglovchi kichik veb-server
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot ishlamoqda!")
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
+    server.serve_forever()
+
+# /start bosilganda
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Assalomu alaykum!\nIltimos, ism va familiyangizni kiriting:")
+    return NAME
+
+# Ism-familiya qabul qilinganda
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.message.text
+    context.user_data['full_name'] = user_name
+    
+    await update.message.reply_text(
+        f"Rahmat, {user_name}!\nEndi uy vazifangizni yuboring (matn, rasm yoki fayl ko'rinishida):"
+    )
+    return HOMEWORK
+
+# Uy vazifasi qabul qilinganda va ustozga (sizga) yuborilganda
+async def get_homework(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = context.user_data.get('full_name', 'O\'quvchi')
+    admin_id = os.environ.get("ADMIN_ID") # Sizning Telegram ID raqamingiz
+
+    # 1. O'quvchiga tasdiq xabari
+    await update.message.reply_text("✅ Uy vazifangiz ustozga muvaffaqiyatli yetkazildi!")
+
+    # 2. Ustozga (Sizga) xabar yo'naltirish
+    if admin_id:
+        try:
+            # Avval o'quvchi haqida ma'lumot yuboramiz
+            student_info = (
+                f"📥 **Yangi uy vazifasi!**\n\n"
+                f"👤 **O'quvchi:** {user_name}\n"
+                f"🆔 **Telegram username:** @{update.effective_user.username if update.effective_user.username else 'Yo\'q'}"
+            )
+            await context.bot.send_message(chat_id=admin_id, text=student_info, parse_mode="Markdown")
+            
+            # Keyin o'quvchi yuborgan uy vazifasi (fayl/rasm/matn) ni ustozga yo'naltiramiz
+            await update.message.forward(chat_id=admin_id)
+        except Exception as e:
+            print(f"Xabarni admin ga yuborishda xatolik: {e}")
+
+    # Muloqotni yakunlash
+    return ConversationHandler.END
+
+# Bekor qilish komandasi
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Jarayon bekor qilindi. Qaytadan boshlash uchun /start bosing.")
+    return ConversationHandler.END
+
+if __name__ == '__main__':
+    # Veb-serverni fonda ishga tushirish
+    threading.Thread(target=run_web_server, daemon=True).start()
+
+    token = os.environ.get("BOT_TOKEN")
+    app = ApplicationBuilder().token(token).build()
+
+    # ConversationHandler yaratamiz
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            HOMEWORK: [MessageHandler(filters.ALL & ~filters.COMMAND, get_homework)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+
+    app.add_handler(conv_handler)
+
+    print("Bot ishga tushdi...")
+    app.run_polling()
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Render portini tinglovchi kichik veb-server
