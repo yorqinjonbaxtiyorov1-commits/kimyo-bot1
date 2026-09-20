@@ -1,21 +1,37 @@
 import os
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Render port kutganligi uchun kichik server
+# Render port kutganda unga OK (200) javobini qaytaruvchi kichik veb-server
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Bot ishlamoqda!")
 
-def run_dummy_server():
+def run_web_server():
     port = int(os.environ.get("PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# Serverni alohida oqimda (thread) ishga tushiramiz
-threading.Thread(target=run_dummy_server, daemon=True).start()
+# Bot buyruqlari
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Assalomu alaykum! Bot muvaffaqiyatli ishga tushdi.")
+
+if __name__ == '__main__':
+    # Veb-serverni alohida oqimda (thread) ishga tushiramiz
+    threading.Thread(target=run_web_server, daemon=True).start()
+
+    # Telegram botni ishga tushirish
+    token = os.environ.get("BOT_TOKEN")
+    app = ApplicationBuilder().token(token).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    
+    print("Bot ishga tushdi...")
+    app.run_polling()
 import logging
 from telegram import Update
 from telegram.ext import (
